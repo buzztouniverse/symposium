@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use clap::CommandFactory;
 use serde::Serialize;
 
 use crate::config::Symposium;
@@ -1800,12 +1801,7 @@ fn validate_manifest(
 /// automatically. `help` is added by hand: clap's help subcommand is
 /// disabled and `help_render` handles the bare word itself.
 fn is_reserved_subcommand_name(name: &str) -> bool {
-    use clap::CommandFactory;
-
-    name == "help"
-        || crate::cli::Cli::command()
-            .get_subcommands()
-            .any(|cmd| cmd.get_name() == name || cmd.get_all_aliases().any(|alias| alias == name))
+    name == "help" || crate::cli::Cli::command().find_subcommand(name).is_some()
 }
 
 /// Maximum length (bytes) of a subcommand's `description` field.
@@ -4490,27 +4486,26 @@ mod tests {
 
     #[test]
     fn parse_subcommand_rejects_every_builtin_name() {
-        use clap::CommandFactory;
+        // Same list as md/reference/plugin-definition.md.
+        let builtins = [
+            "init",
+            "sync",
+            "search",
+            "use",
+            "status",
+            "hook",
+            "plugin",
+            "self-update",
+            "crate-info",
+            "telemetry",
+            "help",
+        ];
 
-        let mut builtins: Vec<String> = crate::cli::Cli::command()
-            .get_subcommands()
-            .map(|cmd| cmd.get_name().to_string())
-            .collect();
-        builtins.push("help".to_string());
-
-        // These were missing from the old hand-written list.
-        for name in ["search", "use", "status", "telemetry"] {
-            assert!(builtins.iter().any(|b| b == name), "{name} not a built-in");
-        }
-
-        for name in &builtins {
+        for name in builtins {
             let err = from_str(&manifest_with_subcommand(name))
                 .expect_err(&format!("`{name}` should be rejected"));
             let msg = format!("{err:#}");
-            assert!(
-                msg.contains("shadows") && msg.contains(name.as_str()),
-                "{msg}"
-            );
+            assert!(msg.contains("shadows") && msg.contains(name), "{msg}");
         }
     }
 
